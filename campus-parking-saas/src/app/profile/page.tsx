@@ -1,8 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+
+// Force dynamic rendering
+export const dynamic = 'force-dynamic'
 import { useRouter } from 'next/navigation'
-import { getCurrentUser, getUserProfile, updateUserProfile, signOut } from '@/lib/auth'
+import { useUser, SignOutButton } from '@clerk/nextjs'
+import { getUserProfile, updateUserProfile, syncUserProfile } from '@/lib/clerk-auth-client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -11,7 +15,7 @@ import type { Database } from '@/lib/supabase'
 type UserProfile = Database['public']['Tables']['users']['Row']
 
 export default function ProfilePage() {
-  const [user, setUser] = useState<any>(null)
+  const { user: clerkUser, isLoaded } = useUser()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [permitType, setPermitType] = useState('')
   const [preferences, setPreferences] = useState({
@@ -26,19 +30,24 @@ export default function ProfilePage() {
   const router = useRouter()
 
   useEffect(() => {
-    checkUser()
-  }, [])
+    if (isLoaded) {
+      if (!clerkUser) {
+        router.push('/')
+        return
+      }
+      checkUser()
+    }
+  }, [isLoaded, clerkUser])
 
   const checkUser = async () => {
     try {
-      const currentUser = await getCurrentUser()
-      if (!currentUser) {
-        router.push('/auth/login')
-        return
-      }
-      setUser(currentUser)
+      if (!clerkUser) return
       
-      const userProfile = await getUserProfile(currentUser.id)
+      // Sync user profile with Supabase
+      await syncUserProfile(clerkUser)
+      
+      // Get user profile from Supabase
+      const userProfile = await getUserProfile(clerkUser.id)
       if (userProfile) {
         setProfile(userProfile)
         setPermitType(userProfile.permit_type || '')
@@ -51,7 +60,6 @@ export default function ProfilePage() {
       }
     } catch (error) {
       console.error('Error checking user:', error)
-      router.push('/auth/login')
     } finally {
       setLoading(false)
     }
@@ -77,14 +85,7 @@ export default function ProfilePage() {
     }
   }
 
-  const handleSignOut = async () => {
-    try {
-      await signOut()
-      router.push('/')
-    } catch (error) {
-      console.error('Error signing out:', error)
-    }
-  }
+  // Remove handleSignOut function as we'll use Clerk's SignOutButton
 
   if (loading) {
     return (
@@ -114,9 +115,11 @@ export default function ProfilePage() {
               >
                 Back to Dashboard
               </Button>
-              <Button variant="outline" onClick={handleSignOut}>
-                Sign Out
-              </Button>
+              <SignOutButton>
+                <Button variant="outline">
+                  Sign Out
+                </Button>
+              </SignOutButton>
             </div>
           </div>
         </div>
@@ -138,7 +141,7 @@ export default function ProfilePage() {
                   Email
                 </label>
                 <Input
-                  value={profile?.email || ''}
+                  value={clerkUser?.emailAddresses[0]?.emailAddress || ''}
                   disabled
                   className="bg-gray-50"
                 />
@@ -299,13 +302,14 @@ export default function ProfilePage() {
                 <h4 className="text-sm font-medium text-gray-900">Sign out of your account</h4>
                 <p className="text-sm text-gray-600">You'll need to sign in again to access your account.</p>
               </div>
-              <Button
-                variant="outline"
-                onClick={handleSignOut}
-                className="border-red-300 text-red-600 hover:bg-red-50"
-              >
-                Sign Out
-              </Button>
+              <SignOutButton>
+                <Button
+                  variant="outline"
+                  className="border-red-300 text-red-600 hover:bg-red-50"
+                >
+                  Sign Out
+                </Button>
+              </SignOutButton>
             </div>
           </CardContent>
         </Card>

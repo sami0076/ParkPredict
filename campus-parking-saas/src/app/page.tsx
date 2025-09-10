@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -12,13 +13,21 @@ export default function Home() {
             <div className="flex items-center">
               <h1 className="text-2xl font-bold text-gray-900">Campus Parking</h1>
             </div>
-            <div className="flex space-x-4">
-              <Link href="/auth/login">
-                <Button variant="outline">Sign In</Button>
-              </Link>
-              <Link href="/auth/register">
-                <Button>Get Started</Button>
-              </Link>
+            <div className="flex items-center space-x-4">
+              <SignedOut>
+                <SignInButton mode="modal">
+                  <Button variant="outline">Sign In</Button>
+                </SignInButton>
+                <SignUpButton mode="modal">
+                  <Button>Get Started</Button>
+                </SignUpButton>
+              </SignedOut>
+              <SignedIn>
+                <Link href="/dashboard">
+                  <Button variant="outline">Dashboard</Button>
+                </Link>
+                <UserButton afterSignOutUrl="/" />
+              </SignedIn>
             </div>
           </div>
         </div>
@@ -36,16 +45,25 @@ export default function Home() {
             predictive analytics, and personalized recommendations for campus parking.
           </p>
           <div className="mt-10">
-            <Link href="/auth/register">
-              <Button size="lg" className="mr-4">
-                Find Parking Now
-              </Button>
-            </Link>
-            <Link href="/auth/login">
-              <Button variant="outline" size="lg">
-                Admin Dashboard
-              </Button>
-            </Link>
+            <SignedOut>
+              <SignUpButton mode="modal">
+                <Button size="lg" className="mr-4">
+                  Find Parking Now
+                </Button>
+              </SignUpButton>
+              <SignInButton mode="modal">
+                <Button variant="outline" size="lg">
+                  Admin Dashboard
+                </Button>
+              </SignInButton>
+            </SignedOut>
+            <SignedIn>
+              <Link href="/dashboard">
+                <Button size="lg" className="mr-4">
+                  Go to Dashboard
+                </Button>
+              </Link>
+            </SignedIn>
           </div>
         </div>
 
@@ -146,11 +164,20 @@ export default function Home() {
             Join thousands of students, faculty, and administrators who have streamlined 
             their parking experience with our smart solution.
           </p>
-          <Link href="/auth/register">
-            <Button size="lg" className="mr-4">
-              Get Started Today
-            </Button>
-          </Link>
+          <SignedOut>
+            <SignUpButton mode="modal">
+              <Button size="lg" className="mr-4">
+                Get Started Today
+              </Button>
+            </SignUpButton>
+          </SignedOut>
+          <SignedIn>
+            <Link href="/dashboard">
+              <Button size="lg" className="mr-4">
+                Go to Dashboard
+              </Button>
+            </Link>
+          </SignedIn>
         </div>
       </div>
 

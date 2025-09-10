@@ -1,8 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+
+// Force dynamic rendering
+export const dynamic = 'force-dynamic'
 import { useRouter } from 'next/navigation'
-import { getCurrentUser, getUserProfile, signOut } from '@/lib/auth'
+import { useUser, SignOutButton } from '@clerk/nextjs'
+import { getUserProfile, syncUserProfile } from '@/lib/clerk-auth-client'
 import { supabase } from '@/lib/supabase'
 import { getParkingRecommendation, getOccupancyStatus } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -14,7 +18,7 @@ type ParkingLot = Database['public']['Tables']['parking_lots']['Row']
 type UserProfile = Database['public']['Tables']['users']['Row']
 
 export default function DriverDashboard() {
-  const [user, setUser] = useState<any>(null)
+  const { user: clerkUser, isLoaded } = useUser()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [parkingLots, setParkingLots] = useState<ParkingLot[]>([])
   const [filteredLots, setFilteredLots] = useState<ParkingLot[]>([])
@@ -26,10 +30,16 @@ export default function DriverDashboard() {
   const router = useRouter()
 
   useEffect(() => {
-    checkUser()
-    fetchParkingLots()
-    getUserLocation()
-  }, [])
+    if (isLoaded) {
+      if (!clerkUser) {
+        router.push('/')
+        return
+      }
+      checkUser()
+      fetchParkingLots()
+      getUserLocation()
+    }
+  }, [isLoaded, clerkUser])
 
   useEffect(() => {
     filterLots()
@@ -49,18 +59,16 @@ export default function DriverDashboard() {
 
   const checkUser = async () => {
     try {
-      const currentUser = await getCurrentUser()
-      if (!currentUser) {
-        router.push('/auth/login')
-        return
-      }
-      setUser(currentUser)
+      if (!clerkUser) return
       
-      const userProfile = await getUserProfile(currentUser.id)
+      // Sync user profile with Supabase
+      await syncUserProfile(clerkUser)
+      
+      // Get user profile from Supabase
+      const userProfile = await getUserProfile(clerkUser.id)
       setProfile(userProfile)
     } catch (error) {
       console.error('Error checking user:', error)
-      router.push('/auth/login')
     } finally {
       setLoading(false)
     }
@@ -122,14 +130,7 @@ export default function DriverDashboard() {
     setFilteredLots(filtered)
   }
 
-  const handleSignOut = async () => {
-    try {
-      await signOut()
-      router.push('/')
-    } catch (error) {
-      console.error('Error signing out:', error)
-    }
-  }
+  // Remove handleSignOut function as we'll use Clerk's SignOutButton
 
   const openInMaps = (lot: ParkingLot) => {
     const url = `https://www.google.com/maps/dir/?api=1&destination=${lot.location.lat},${lot.location.lng}`
@@ -155,7 +156,7 @@ export default function DriverDashboard() {
           <div className="flex justify-between items-center py-6">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Parking Dashboard</h1>
-              <p className="text-gray-600">Welcome back, {profile?.email}</p>
+              <p className="text-gray-600">Welcome back, {clerkUser?.emailAddresses[0]?.emailAddress}</p>
             </div>
             <div className="flex items-center space-x-4">
               {profile?.role === 'admin' && (
@@ -172,9 +173,11 @@ export default function DriverDashboard() {
               >
                 Profile
               </Button>
-              <Button variant="outline" onClick={handleSignOut}>
-                Sign Out
-              </Button>
+              <SignOutButton>
+                <Button variant="outline">
+                  Sign Out
+                </Button>
+              </SignOutButton>
             </div>
           </div>
         </div>

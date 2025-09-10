@@ -1,8 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+
+// Force dynamic rendering
+export const dynamic = 'force-dynamic'
 import { useRouter } from 'next/navigation'
-import { getCurrentUser, getUserProfile, signOut } from '@/lib/auth'
+import { useUser, SignOutButton } from '@clerk/nextjs'
+import { getUserProfile, syncUserProfile } from '@/lib/clerk-auth-client'
 import { supabase } from '@/lib/supabase'
 import { formatDate, getOccupancyStatus } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -14,7 +18,7 @@ type Violation = Database['public']['Tables']['violations']['Row']
 type UserProfile = Database['public']['Tables']['users']['Row']
 
 export default function AdminDashboard() {
-  const [user, setUser] = useState<any>(null)
+  const { user: clerkUser, isLoaded } = useUser()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [parkingLots, setParkingLots] = useState<ParkingLot[]>([])
   const [violations, setViolations] = useState<Violation[]>([])
@@ -32,8 +36,14 @@ export default function AdminDashboard() {
   const router = useRouter()
 
   useEffect(() => {
-    checkUser()
-  }, [])
+    if (isLoaded) {
+      if (!clerkUser) {
+        router.push('/')
+        return
+      }
+      checkUser()
+    }
+  }, [isLoaded, clerkUser])
 
   useEffect(() => {
     if (profile?.role === 'admin') {
@@ -43,14 +53,13 @@ export default function AdminDashboard() {
 
   const checkUser = async () => {
     try {
-      const currentUser = await getCurrentUser()
-      if (!currentUser) {
-        router.push('/auth/login')
-        return
-      }
-      setUser(currentUser)
+      if (!clerkUser) return
       
-      const userProfile = await getUserProfile(currentUser.id)
+      // Sync user profile with Supabase
+      await syncUserProfile(clerkUser)
+      
+      // Get user profile from Supabase
+      const userProfile = await getUserProfile(clerkUser.id)
       if (!userProfile || userProfile.role !== 'admin') {
         router.push('/dashboard')
         return
@@ -58,7 +67,7 @@ export default function AdminDashboard() {
       setProfile(userProfile)
     } catch (error) {
       console.error('Error checking user:', error)
-      router.push('/auth/login')
+      router.push('/dashboard')
     } finally {
       setLoading(false)
     }
@@ -142,14 +151,7 @@ export default function AdminDashboard() {
     }
   }
 
-  const handleSignOut = async () => {
-    try {
-      await signOut()
-      router.push('/')
-    } catch (error) {
-      console.error('Error signing out:', error)
-    }
-  }
+  // Remove handleSignOut function as we'll use Clerk's SignOutButton
 
   if (loading) {
     return (
@@ -185,9 +187,11 @@ export default function AdminDashboard() {
               >
                 Profile
               </Button>
-              <Button variant="outline" onClick={handleSignOut}>
-                Sign Out
-              </Button>
+              <SignOutButton>
+                <Button variant="outline">
+                  Sign Out
+                </Button>
+              </SignOutButton>
             </div>
           </div>
         </div>
